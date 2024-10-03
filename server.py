@@ -11,8 +11,12 @@ MSG_MSG = 2
 MSG_ERRO = 3
 
 # Configurações do servidor
-server_ip = "0.0.0.0"
+# pegar o ip da maquina
+hostname = socket.gethostname()
+server_ip = socket.gethostbyname(hostname)
 server_port = 12345
+
+print(f"Endereço IP local: {server_ip}")
 
 # Inicializa o socket UDP do servidor
 server_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)

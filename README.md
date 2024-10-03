@@ -1,4 +1,4 @@
-# Sistema de troca de mensagens utilizando UDP com dois programas distintos: um para o servidor e outro para o cliente. 
+# Sistema de troca de mensagens utilizando UDP com Servidor e Multi-Clientes. 
 
 Implementação do Server
 

@@ -22,5 +22,5 @@ O cliente será responsável por:
     Enviar mensagens MSG para outros clientes ou para o servidor.
     Receber e exibir mensagens.
 
-Executar client.py com  'client.py <ID> <Nome> <IP> <PORT>'
-(exemplo: 'client.py 1 Alice 127.0.0.1 12345')
+Executar client.py com  'client.py ID Nome IP PORT';
+(exemplo: 'client.py 1 Alice 127.0.0.1 12345');

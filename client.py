@@ -11,7 +11,7 @@ MSG_ERRO = 3
 
 # Parâmetros do cliente
 if len(sys.argv) < 5:
-    print("Uso: cliente.py <ID> <Nome> <IP do Servidor> <Porta>")
+    print("Uso: cliente.py <ID> <Nome> <IP do Servidor> <Porta>\n")
     sys.exit(1)
 
 user_id = int(sys.argv[1])
@@ -39,18 +39,21 @@ def receive_messages():
         message = data[36:36+msg_size].decode()
 
         if msg_type == MSG_MSG:
-            if dest_id == 0:
-                print(f"[Broadcast] {origin_name}: {message}")
+            print(f"destinatario da mensagem subentenddido (debug - apagar depois): {dest_id}\n")
+            if dest_id == 1: # erro gerado quando usando 0 --> mudando para 1 cria broadcast para 0 por alguma razão
+                print(f"[Broadcast] {origin_name}: {message}\n")
+            elif dest_id > 1:# aqui também
+                print(f"[Privado de {origin_name}]: {message}\n")
             else:
-                print(f"[Privado de {origin_name}]: {message}")
+                print(f"[classifc. error] de {origin_name}]: {message}\n")
         elif msg_type == MSG_ERRO:
-            print(f"[ERRO]: {message}")
+            print(f"[ERRO]: {message}\n")
         else:
-            print(f"[Mensagem desconhecida] {message}")
+            print(f"[Mensagem desconhecida] {message}\n")
 
 # Envio da mensagem de OI
 send_message(MSG_OI)
-print("Conectado ao servidor.")
+print("Conectado ao servidor.\n")
 
 # Iniciar thread para receber mensagens
 threading.Thread(target=receive_messages, daemon=True).start()
@@ -58,13 +61,13 @@ threading.Thread(target=receive_messages, daemon=True).start()
 # Loop para envio de mensagens
 try:
     while True:
-        dest = input("Digite o ID do destinatário (0 para todos): ")
+        dest = input("Digite o ID do destinatário (0 para todos):\n")
         dest_id = int(dest)
-        msg = input("Digite sua mensagem: ")
+        msg = input("Digite sua mensagem: \n")
         send_message(MSG_MSG, dest_id, msg)
 except KeyboardInterrupt:
     # Enviar mensagem de TCHAU e encerrar
     send_message(MSG_TCHAU)
-    print("Desconectado do servidor.")
+    print("Desconectado do servidor.\n")
     client_socket.close()
     sys.exit(0)

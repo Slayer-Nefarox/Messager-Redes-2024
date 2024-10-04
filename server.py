@@ -12,9 +12,15 @@ MSG_ERRO = 3
 
 # Configurações do servidor
 # pegar o ip da maquina
+# Parâmetros do cliente
+
 hostname = socket.gethostname()
 server_ip = socket.gethostbyname(hostname)
-server_port = 12345
+if len(sys.argv) < 2:
+    print("Uso: server.py <Porta>")
+    sys.exit(1)
+else:
+    server_port = int(sys.argv[1])
 
 print(f"Endereço IP local: {server_ip}")
 
@@ -45,7 +51,7 @@ def handle_message(data, addr):
             if len(data) >= 36 + msg_size:
                 message = data[36:36+msg_size].decode(errors='replace')
             else:
-                print(f"Erro: Mensagem incompleta recebida de {addr}.")
+                print(f"Erro: Mensagem incompleta recebida de {addr}.\n")
                 return
         else:
             message = ""
@@ -53,26 +59,26 @@ def handle_message(data, addr):
         # Lida com os diferentes tipos de mensagens
         if msg_type == MSG_OI:
             if origin_id in clients:
-                print(f"Cliente {origin_id} já está conectado.")
-                send_message(MSG_ERRO, 0, origin_id, addr, "Servidor", "ID já em uso.")
+                print(f"Cliente {origin_id} já está conectado.\n")
+                send_message(MSG_ERRO, 0, origin_id, addr, "Servidor", "ID já em uso.\n")
             else:
                 # Registra novo cliente
                 clients[origin_id] = (addr, username)
                 print(f"Cliente {origin_id} ({username}) conectado.")
-                send_message(MSG_OI, 0, origin_id, addr, "Servidor", "Conexão aceita.")
+                send_message(MSG_OI, 0, origin_id, addr, "Servidor", "Conexão aceita.\n")
         
         elif msg_type == MSG_TCHAU:
             if origin_id in clients:
-                print(f"Cliente {origin_id} ({username}) desconectado.")
+                print(f"Cliente {origin_id} ({username}) desconectado.\n")
                 del clients[origin_id]
             else:
-                print(f"Mensagem TCHAU recebida de cliente não registrado: {origin_id}")
+                print(f"Mensagem TCHAU recebida de cliente não registrado: {origin_id}\n")
 
         elif msg_type == MSG_MSG:
             if origin_id not in clients:
-                send_message(MSG_ERRO, 0, origin_id, addr, "Servidor", "ID de origem não registrado.")
+                send_message(MSG_ERRO, 0, origin_id, addr, "Servidor", "ID de origem não registrado.\n")
                 return
-            print(f"Mensagem de {origin_id} para {dest_id}: {message}")
+            print(f"Mensagem de {origin_id} para {dest_id}: {message}\n")
             
             # Envia a mensagem para o destinatário correto
             if dest_id == 0:
@@ -82,16 +88,17 @@ def handle_message(data, addr):
             elif dest_id in clients:
                 send_message(MSG_MSG, origin_id, dest_id, clients[dest_id][0], username, message)
             else:
-                send_message(MSG_ERRO, 0, origin_id, addr, "Servidor", "ID de destino não encontrado.")
+                send_message(MSG_ERRO, 0, origin_id, addr, "Servidor", "ID de destino não encontrado.\n")
 
         else:
             print(f"Tipo de mensagem desconhecido: {msg_type}")
-            send_message(MSG_ERRO, 0, origin_id, addr, "Servidor", "Tipo de mensagem desconhecido.")
+            send_message(MSG_ERRO, 0, origin_id, addr, "Servidor", "Tipo de mensagem desconhecido.\n")
     
     except struct.error as e:
-        print(f"Erro ao desempacotar a mensagem: {e}")
+        print(f"Erro ao desempacotar a mensagem: {e}\n")
     except UnicodeDecodeError as e:
-        print(f"Erro de decodificação de texto: {e}")
+        print(f"Erro de decodificação de texto: {e}\n")
+    finally: return 0
 
 # Thread para receber e tratar mensagens
 def receive_messages():
@@ -105,7 +112,7 @@ def send_server_status():
     while True:
         time.sleep(60)
         elapsed_time = time.time() - start_time
-        status_message = f"Servidor ativo há {elapsed_time:.0f} segundos. Clientes conectados: {len(clients)}."
+        status_message = f"Servidor ativo há {elapsed_time:.0f} segundos. Clientes conectados: {len(clients)}.\n"
         print(status_message)
 
         # Envia mensagem de status a todos os clientes
@@ -116,13 +123,13 @@ def send_server_status():
 threading.Thread(target=receive_messages, daemon=True).start()
 threading.Thread(target=send_server_status, daemon=True).start()
 
-print(f"Servidor iniciado em {server_ip}:{server_port}.")
+print(f"Servidor iniciado em {server_ip}:{server_port}.\n")
 
 # Manter o servidor ativo
 try:
     while True:
         time.sleep(1)
 except KeyboardInterrupt:
-    print("Encerrando servidor.")
+    print("Encerrando servidor.\n")
     server_socket.close()
     sys.exit(0)

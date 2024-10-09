@@ -3,71 +3,114 @@ import struct
 import threading
 import sys
 
-# Definições das mensagens
-MSG_OI = 0
-MSG_TCHAU = 1
-MSG_MSG = 2
-MSG_ERRO = 3
+# Definições dos tipos de mensagens
+MSG_OI = 0      # Mensagem para se identificar no servidor
+MSG_TCHAU = 1   # Mensagem para desconectar do servidor
+MSG_MSG = 2     # Mensagem de texto entre clientes
+MSG_ERRO = 3    # Mensagem de erro retornada pelo servidor
 
-# Parâmetros do cliente
+# Verifica se os parâmetros foram passados corretamente
 if len(sys.argv) < 5:
     print("Uso: cliente.py <ID> <Nome> <IP do Servidor> <Porta>\n")
     sys.exit(1)
 
+# Define o ID do cliente, nome de usuário, IP e porta do servidor
 user_id = int(sys.argv[1])
-username = sys.argv[2][:20].ljust(20, '\x00')  # Garantir tamanho de 20 caracteres
+username = sys.argv[2][:20].ljust(20, '\x00')  # Garantir tamanho de 20 caracteres para o nome
 server_ip = sys.argv[3]
 server_port = int(sys.argv[4])
 
-# Inicialização do socket UDP
+# Inicializa o socket UDP
 client_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
-# Função para enviar mensagem ao servidor
+# Função para enviar mensagens ao servidor
 def send_message(msg_type, dest_id=0, message=""):
+    # Monta a estrutura da mensagem
     message_size = len(message)
     packet = struct.pack("!IIII", msg_type, user_id, dest_id, message_size)
-    packet += username.encode()
-    packet += message.encode()
+    packet += username.encode()  # Adiciona o nome do usuário
+    packet += message.encode()   # Adiciona o texto da mensagem
+    # Envia a mensagem para o servidor
     client_socket.sendto(packet, (server_ip, server_port))
+    print(f"Enviado: {msg_type}, {user_id}, {dest_id}, {message_size}, {username}, {message}")
 
-# Thread para receber e exibir mensagens
+# Função para receber e exibir mensagens do servidor
 def receive_messages():
     while True:
-        data, _ = client_socket.recvfrom(1024)
-        msg_type, origin_id, dest_id, msg_size = struct.unpack("!IIII", data[:16])
-        origin_name = data[16:36].decode().strip('\x00')
-        message = data[36:36+msg_size].decode()
+        try:
+            data, _ = client_socket.recvfrom(1024)
+            msg_type, origin_id, dest_id, msg_size = struct.unpack("!IIII", data[:16])
+            origin_name = data[16:36].decode().strip('\x00')
+            message = data[36:36 + msg_size].decode()
 
-        if msg_type == MSG_MSG:
-            print(f"destinatario da mensagem subentenddido (debug - apagar depois): {dest_id}\n")
-            if dest_id == 1: # erro gerado quando usando 0 --> mudando para 1 cria broadcast para 0 por alguma razão
-                print(f"[Broadcast] {origin_name}: {message}\n")
-            elif dest_id > 1:# aqui também
-                print(f"[Privado de {origin_name}]: {message}\n")
+            print(f"Recebido: {msg_type}, {origin_id}, {dest_id}, {msg_size}, {origin_name}, {message}") # Para debug
+            if msg_type == MSG_MSG:
+                if origin_id == 0:
+                    print(f"[Servidor] {message}")  
+                elif dest_id == 0:  # Broadcast para todos
+                    if origin_id == user_id:
+                        print(f"[Broadcast (Você)] {origin_name}: {message}")
+                    else:
+                        print(f"[Broadcast] {origin_name}: {message}")  
+                elif dest_id == user_id:  # Mensagem privada
+                    print(f"[Privado] {origin_name}: {message}")
+                else:
+                   print(f"[Mensagem desconhecida] {message}")
+
+            elif msg_type == MSG_ERRO:
+                print(f"[ERRO] {message}")
+            elif msg_type == MSG_OI:
+                print(f"[Servidor] Conexão aceita: {message}")
             else:
-                print(f"[classifc. error] de {origin_name}]: {message}\n")
-        elif msg_type == MSG_ERRO:
-            print(f"[ERRO]: {message}\n")
-        else:
-            print(f"[Mensagem desconhecida] {message}\n")
+                print(f"[Mensagem desconhecida] {message}")
+        except struct.error:
+            print("Erro ao desempacotar mensagem.")
+            break
+        except UnicodeDecodeError:
+            print("Erro ao decodificar mensagem.")
+            break
+        except Exception as e:
+            print(f"Erro ao receber mensagem: {e}")
+            break
 
-# Envio da mensagem de OI
+# Envia a mensagem de identificação "OI" para o servidor
 send_message(MSG_OI)
-print("Conectado ao servidor.\n")
+print("Conectado ao servidor.")
 
-# Iniciar thread para receber mensagens
+# Inicia uma thread para receber mensagens do servidor
 threading.Thread(target=receive_messages, daemon=True).start()
 
-# Loop para envio de mensagens
+# Loop principal para enviar mensagens
 try:
     while True:
-        dest = input("Digite o ID do destinatário (0 para todos):\n")
-        dest_id = int(dest)
-        msg = input("Digite sua mensagem: \n")
-        send_message(MSG_MSG, dest_id, msg)
+        try:
+            # Usuário entra o ID do destinatário
+            dest = input("Digite o ID do destinatário (0 para todos):\n")
+            dest_id = int(dest)
+            if dest_id < 0:
+                print("[ERRO] ID de destino inválido. Tente novamente.")
+                continue  # Volta a pedir o ID
+
+            # Só pede a mensagem se o ID for válido
+            msg = input("Digite sua mensagem:\n")
+            if msg.strip() == "":  # Verifica se a mensagem não é vazia
+                print("[ERRO] Mensagem vazia. Tente novamente.")
+                continue
+
+            # Envia a mensagem para o servidor
+            send_message(MSG_MSG, dest_id, msg)
+        except ValueError:
+            print("ID inválido. Tente novamente.")
+            continue
+        except Exception as e:
+            print(f"Erro ao enviar mensagem: {e}")
+            break
 except KeyboardInterrupt:
-    # Enviar mensagem de TCHAU e encerrar
+    # Se o usuário interromper, envia mensagem de "TCHAU" e encerra
     send_message(MSG_TCHAU)
-    print("Desconectado do servidor.\n")
+    print("Desconectado do servidor.")
+    client_socket.close()
+    sys.exit(0)
+finally:
     client_socket.close()
     sys.exit(0)

@@ -56,7 +56,7 @@ def receive_messages():
                 elif dest_id == user_id:  # Mensagem privada
                     print(f"[Privado] {origin_name}: {message}")
                 else:
-                   print(f"[Mensagem desconhecida] {message}")
+                    print(f"[Mensagem desconhecida] {message}")
 
             elif msg_type == MSG_ERRO:
                 print(f"[ERRO] {message}")

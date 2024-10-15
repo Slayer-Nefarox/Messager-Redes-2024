@@ -66,6 +66,15 @@ def handle_message(data, addr):
                 print(f"Cliente {origin_id} tentou se desconectar sem estar registrado.")
 
         elif msg_type == MSG_MSG:
+
+            # lst: lista de clientes conectados
+            if message == "lst":
+                client_list = {client_id: client_data[1] for client_id, client_data in clients.items()}
+                print(client_list)
+                client_list = "\nLista de clientes conectados:\n"+str(client_list).replace("{","").replace("}","").replace(", ","\n").replace(":"," - ").replace(" '","").replace("'","")
+                send_message(MSG_MSG, 0, origin_id, addr, "Servidor", str(client_list))
+                return
+
             # Envia a mensagem para todos (broadcast) ou para um cliente específico
             if origin_id not in clients:
                 send_message(MSG_ERRO, 0, origin_id, addr, "Servidor", "ID de origem não registrado.")

@@ -8,10 +8,11 @@ MSG_OI = 0      # Mensagem para se identificar no servidor
 MSG_TCHAU = 1   # Mensagem para desconectar do servidor
 MSG_MSG = 2     # Mensagem de texto entre clientes
 MSG_ERRO = 3    # Mensagem de erro retornada pelo servidor
+PROMPT_MESSAGE = ''
 
 # Verifica se os parâmetros foram passados corretamente
 if len(sys.argv) < 5:
-    print("Uso: cliente.py <ID> <Nome> <IP do Servidor> <Porta>\n")
+    print("Uso: client.py <ID> <Nome> <IP do Servidor> <Porta>\n")
     sys.exit(1)
 
 # Define o ID do cliente, nome de usuário, IP e porta do servidor
@@ -63,6 +64,9 @@ def receive_messages():
                 print(f"[Servidor] Conexão aceita: {message}")
             else:
                 print(f"[Mensagem desconhecida] {message}")
+
+            print(PROMPT_MESSAGE)
+
         except struct.error:
             print("Erro ao desempacotar mensagem.")
             break
@@ -85,14 +89,22 @@ try:
     while True:
         try:
             # Usuário entra o ID do destinatário
-            dest = input("Digite o ID do destinatário (0 para todos):\n")
+            PROMPT_MESSAGE = "\n--- MENU ---\nlst - lista usuários online\n0 - envia mensagem para todos\nnúmero - envia mensagem para usuário específico\n"
+            dest = input(PROMPT_MESSAGE+"\n")
+
+            # pede pro servidor enviar lista de usuários
+            if dest == "lst":
+                send_message(MSG_MSG, 0, "lst")
+                continue
+
             dest_id = int(dest)
             if dest_id < 0:
                 print("[ERRO] ID de destino inválido. Tente novamente.")
                 continue  # Volta a pedir o ID
 
             # Só pede a mensagem se o ID for válido
-            msg = input("Digite sua mensagem:\n")
+            PROMPT_MESSAGE = "Digite sua mensagem:"
+            msg = input(PROMPT_MESSAGE+"\n")
             if msg.strip() == "":  # Verifica se a mensagem não é vazia
                 print("[ERRO] Mensagem vazia. Tente novamente.")
                 continue

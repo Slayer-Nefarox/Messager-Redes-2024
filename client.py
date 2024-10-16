@@ -8,6 +8,7 @@ MSG_OI = 0      # Identificação de conexão
 MSG_TCHAU = 1   # Encerrar conexão
 MSG_MSG = 2     # Mensagem de texto
 MSG_ERRO = 3    # Mensagem de erro
+MSG_LISTA_CLIENTES = 4  # Lista de clientes conectados
 
 class ClientApp:
     def __init__(self):
@@ -71,6 +72,10 @@ class ClientApp:
         # Botão para enviar mensagem
         self.send_button = Button(self.window, text="Enviar", state="disabled", command=self.send_msg)
         self.send_button.pack()
+
+        # Botão para solicitar lista de clientes com POP-UP de clientes
+        self.client_list_button = Button(self.window, text="Lista de Clientes", command=self.request_client_list)
+        self.client_list_button.pack()
 
         # Configura o fechamento da janela
         self.window.protocol("WM_DELETE_WINDOW", self.close_connection)
@@ -148,6 +153,10 @@ class ClientApp:
         except ValueError:
             self.message_list.insert(END, "[ERRO] ID do destinatário inválido.")  # Se o ID não for válido
 
+    def request_client_list(self):
+        """Método para solicitar a lista de clientes conectados"""
+        self.send_message(MSG_LISTA_CLIENTES)  # Envia a mensagem de solicitação da lista
+
     def close_connection(self):
         """Método para encerrar a conexão com o servidor"""
         if self.connected:
@@ -155,14 +164,16 @@ class ClientApp:
             self.client_socket.close()  # Fecha o socket do cliente
             self.connected = False  # Atualiza o status de conexão
             self.message_list.insert(END, "[INFO] Desconectado do servidor.")
+            self.connect_button.config(state="normal")  # Habilita o botão de conectar
+            self.disconnect_button.config(state="disabled") # Desabilita o botão de desconectar
+        else:
+            # Resetar botões e inputs da GUI
+            self.connect_button.config(state="normal")  # Habilita o botão de conectar
+            self.disconnect_button.config(state="disabled")  # Desabilita o botão de desconectar
+            self.send_button.config(state="disabled")  # Desabilita o botão de enviar mensagens
 
-        # Resetar botões e inputs da GUI
-        self.connect_button.config(state="normal")  # Habilita o botão de conectar
-        self.disconnect_button.config(state="disabled")  # Desabilita o botão de desconectar
-        self.send_button.config(state="disabled")  # Desabilita o botão de enviar mensagens
-
-        # Fecha a janela 
-        self.window.destroy()
+            # Fecha a janela 
+            self.window.destroy()
 
 if __name__ == "__main__":
     client = ClientApp()  # Inicia o cliente

@@ -9,6 +9,7 @@ MSG_OI = 0      # Identificação de conexão
 MSG_TCHAU = 1   # Encerrar conexão
 MSG_MSG = 2     # Mensagem de texto
 MSG_ERRO = 3    # Mensagem de erro
+MSG_LISTA_CLIENTES = 4
 
 class ServerApp:
     def __init__(self):
@@ -103,12 +104,16 @@ class ServerApp:
             message = data[36:36 + msg_size].decode(errors='replace')  # Mensagem de texto
 
             # Trata diferentes tipos de mensagens
-            if msg_type == MSG_OI:
+            if msg_type == MSG_OI: # Conecta o client
                 self.handle_connection(origin_id, username, addr)
-            elif msg_type == MSG_TCHAU:
+            elif msg_type == MSG_TCHAU: # Desconecta o client
                 self.handle_disconnection(origin_id)
-            elif msg_type == MSG_MSG:
+            elif msg_type == MSG_MSG: # Envia a mensagem para o client correto
                 self.handle_client_message(origin_id, dest_id, username, message)
+            elif msg_type == MSG_LISTA_CLIENTES: # Envia a lista de clientes conectados
+                client_list = ', '.join([f" {id}: {name}" for id, (_, name) in self.clients.items()])
+                self.send_message(MSG_MSG, 0, origin_id, addr, "Servidor", "Clientes conectados:" + client_list)
+
             else:
                 # Envia uma mensagem de erro se o tipo for desconhecido
                 self.send_message(MSG_ERRO, 0, origin_id, addr, "Servidor", "Tipo de mensagem desconhecido.")
@@ -117,9 +122,9 @@ class ServerApp:
 
     def handle_connection(self, origin_id, username, addr):
         """Método para lidar com a conexão de um novo cliente"""
-        if origin_id in self.clients:
-            # Se o ID do cliente já estiver em uso, envia um erro
+        if (1 <= origin_id <= 999 and origin_id + 1000 in self.clients) or (1001 <= origin_id <= 1999 and origin_id in self.clients): # Se o ID do cliente já estiver em uso, envia um erro
             self.send_message(MSG_ERRO, 0, origin_id, addr, "Servidor", "ID já em uso.")
+            return
         else:
             # Adiciona o cliente ao dicionário de clientes conectados
             self.clients[origin_id] = (addr, username)
@@ -182,9 +187,17 @@ class ServerApp:
 
     def shutdown_server(self):
         """Método para desligar o servidor"""
-        if self.server_socket:
-            self.server_socket.close()  # Fecha o socket do servidor
-        self.window.quit()  # Fecha a interface gráfica
+
+        # Envia mensagem de desconexão para todos os clientes
+        try:
+            shutdown_message = "Servidor desligado. Conexão encerrada."
+            for client_id, (client_addr, _) in self.clients.items():
+                self.send_message(MSG_MSG, 0, client_id, client_addr, "Servidor", shutdown_message)
+            if self.server_socket:
+                self.server_socket.close()  # Fecha o socket do servidor
+                self.window.quit()  # Fecha a interface gráfica
+        except Exception as e:
+            print(f"Erro ao enviar mensagem de desconexão!")
 
 if __name__ == "__main__":
     server = ServerApp()  # Inicia o servidor

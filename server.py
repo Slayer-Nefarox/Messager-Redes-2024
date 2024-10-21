@@ -2,134 +2,202 @@ import socket
 import struct
 import threading
 import time
-import sys
+from tkinter import Tk, Label, Listbox, END, Button, Entry
 
-# Definições das mensagens
-MSG_OI = 0
-MSG_TCHAU = 1
-MSG_MSG = 2
-MSG_ERRO = 3
+# Definição dos tipos de mensagens
+MSG_OI = 0      # Identificação de conexão
+MSG_TCHAU = 1   # Encerrar conexão
+MSG_MSG = 2     # Mensagem de texto
+MSG_ERRO = 3    # Mensagem de erro
+MSG_LISTA_CLIENTES = 4
 
-# Configurações do servidor
-# pegar o ip da maquina
-# Parâmetros do cliente
+class ServerApp:
+    def __init__(self):
+        self.clients = {}  # Dicionário para armazenar clientes conectados {id_cliente: (endereço, nome)}
+        self.server_socket = None  # Socket do servidor
+        self.start_gui()  # Inicia a interface gráfica
 
-hostname = socket.gethostname()
-server_ip = socket.gethostbyname(hostname)
-if len(sys.argv) < 2:
-    print("Uso: server.py <Porta>")
-    sys.exit(1)
-else:
-    server_port = int(sys.argv[1])
+    def start_gui(self):
+        """Método que inicializa a interface gráfica do servidor"""
+        self.window = Tk()
+        self.window.title("Servidor")
 
-print(f"Endereço IP local: {server_ip}")
+        # Detecta o IP automaticamente
+        hostname = socket.gethostname()  # Obtém o nome do host
+        ip_address = socket.gethostbyname(hostname)  # Obtém o IP da máquina
 
-# Inicializa o socket UDP do servidor
-server_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-server_socket.bind((server_ip, server_port))
+        # Entrada para o IP do servidor, preenchido automaticamente
+        self.label_ip = Label(self.window, text="IP do Servidor:")
+        self.label_ip.pack()
+        self.entry_ip = Entry(self.window)
+        self.entry_ip.insert(0, ip_address)  # Preenche o IP automaticamente
+        self.entry_ip.pack()
 
-# Lista de clientes conectados: {id_cliente: (endereço, nome)}
-clients = {}
+        # Entrada para a porta do servidor, sugerida automaticamente (porta maior que 1234)
+        self.label_port = Label(self.window, text="Porta (maior que 1234):")
+        self.label_port.pack()
+        self.entry_port = Entry(self.window)
+        self.entry_port.insert(0, "1235")  # Sugere a porta 1235 por padrão
+        self.entry_port.pack()
 
-# Função para enviar mensagem ao cliente
-def send_message(msg_type, origin_id, dest_id, addr, username="", message=""):
-    message_size = len(message)
-    packet = struct.pack("!IIII", msg_type, origin_id, dest_id, message_size)
-    packet += username.encode().ljust(20, b'\x00')
-    packet += message.encode().ljust(140, b'\x00')
-    server_socket.sendto(packet, addr)
+        # Botão para iniciar o servidor
+        self.start_button = Button(self.window, text="Iniciar Servidor", command=self.start_server)
+        self.start_button.pack()
 
-# Função para tratar mensagens recebidas
-def handle_message(data, addr):
-    try:
-        # Extrai os campos inteiros da mensagem
-        msg_type, origin_id, dest_id, msg_size = struct.unpack("!IIII", data[:16])
-        username = data[16:36].decode().strip('\x00')
+        # Exibição de clientes conectados
+        self.label_clients = Label(self.window, text="Clientes conectados:")
+        self.label_clients.pack()
 
-        # Valida a mensagem e extrai o texto, se necessário
-        if msg_size > 0:
-            if len(data) >= 36 + msg_size:
-                message = data[36:36+msg_size].decode(errors='replace')
-            else:
-                print(f"Erro: Mensagem incompleta recebida de {addr}.\n")
+        self.client_list = Listbox(self.window)
+        self.client_list.pack(fill="both", expand=True)
+
+        # Botão para desligar o servidor
+        self.shutdown_button = Button(self.window, text="Desligar Servidor", command=self.shutdown_server)
+        self.shutdown_button.pack()
+
+        # Configura fechamento da janela
+        self.window.protocol("WM_DELETE_WINDOW", self.shutdown_server)
+        self.window.mainloop()
+
+    def start_server(self):
+        """Inicia o servidor e escuta conexões"""
+        try:
+            # Obtém o IP e a porta da interface gráfica
+            ip = self.entry_ip.get().strip()
+            port = int(self.entry_port.get())
+
+            # Verifica se a porta é maior que 1234
+            if port <= 1234:
+                self.update_status("[ERRO] A porta deve ser maior que 1234.")
                 return
+
+            # Criação do socket do servidor (UDP)
+            self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            self.server_socket.bind((ip, port))
+
+            # Desabilita o botão de iniciar servidor após a execução
+            self.start_button.config(state="disabled")
+
+            # Inicia threads para receber mensagens e enviar status do servidor
+            threading.Thread(target=self.receive_messages, daemon=True).start()
+            threading.Thread(target=self.send_server_status, daemon=True).start()
+
+            self.update_status(f"Servidor iniciado em {ip}:{port}")  # Atualiza o status na interface
+        except Exception as e:
+            self.update_status(f"[ERRO] Falha ao iniciar o servidor: {e}")
+
+    def send_message(self, msg_type, origin_id, dest_id, addr, username="", message=""):
+        """Método para enviar mensagens para os clientes"""
+        message_size = len(message)  # Tamanho da mensagem
+        # Empacota a mensagem para enviar em formato binário
+        packet = struct.pack("!IIII", msg_type, origin_id, dest_id, message_size)
+        packet += username.encode().ljust(20, b'\x00')  # Nome com 20 caracteres
+        packet += message.encode().ljust(140, b'\x00')  # Mensagem com até 140 caracteres
+        self.server_socket.sendto(packet, addr)  # Envia o pacote para o cliente
+
+    def handle_message(self, data, addr):
+        """Método para tratar diferentes tipos de mensagens recebidas dos clientes"""
+        try:
+            # Desempacota a mensagem recebida
+            msg_type, origin_id, dest_id, msg_size = struct.unpack("!IIII", data[:16])
+            username = data[16:36].decode().strip('\x00')  # Nome do cliente
+            message = data[36:36 + msg_size].decode(errors='replace')  # Mensagem de texto
+
+            # Trata diferentes tipos de mensagens
+            if msg_type == MSG_OI: # Conecta o client
+                self.handle_connection(origin_id, username, addr)
+            elif msg_type == MSG_TCHAU: # Desconecta o client
+                self.handle_disconnection(origin_id)
+            elif msg_type == MSG_MSG: # Envia a mensagem para o client correto
+                self.handle_client_message(origin_id, dest_id, username, message)
+            elif msg_type == MSG_LISTA_CLIENTES: # Envia a lista de clientes conectados
+                client_list = ', '.join([f" {id}: {name}" for id, (_, name) in self.clients.items()])
+                self.send_message(MSG_MSG, 0, origin_id, addr, "Servidor", "Clientes conectados:" + client_list)
+
+            else:
+                # Envia uma mensagem de erro se o tipo for desconhecido
+                self.send_message(MSG_ERRO, 0, origin_id, addr, "Servidor", "Tipo de mensagem desconhecido.")
+        except Exception as e:
+            print(f"Erro ao tratar a mensagem: {e}")
+
+    def handle_connection(self, origin_id, username, addr):
+        """Método para lidar com a conexão de um novo cliente"""
+        if (1 <= origin_id <= 999 and origin_id + 1000 in self.clients) or (1001 <= origin_id <= 1999 and origin_id in self.clients): # Se o ID do cliente já estiver em uso, envia um erro
+            self.send_message(MSG_ERRO, 0, origin_id, addr, "Servidor", "ID já em uso.")
+            return
         else:
-            message = ""
+            # Adiciona o cliente ao dicionário de clientes conectados
+            self.clients[origin_id] = (addr, username)
+            self.update_client_list()  # Atualiza a lista de clientes na interface
+            self.update_status(f"Cliente {origin_id} ({username}) conectado.")
+            self.send_message(MSG_OI, 0, origin_id, addr, "Servidor", "Conexão aceita.")  # Envia confirmação
 
-        # Lida com os diferentes tipos de mensagens
-        if msg_type == MSG_OI:
-            if origin_id in clients:
-                print(f"Cliente {origin_id} já está conectado.\n")
-                send_message(MSG_ERRO, 0, origin_id, addr, "Servidor", "ID já em uso.\n")
-            else:
-                # Registra novo cliente
-                clients[origin_id] = (addr, username)
-                print(f"Cliente {origin_id} ({username}) conectado.")
-                send_message(MSG_OI, 0, origin_id, addr, "Servidor", "Conexão aceita.\n")
-        
-        elif msg_type == MSG_TCHAU:
-            if origin_id in clients:
-                print(f"Cliente {origin_id} ({username}) desconectado.\n")
-                del clients[origin_id]
-            else:
-                print(f"Mensagem TCHAU recebida de cliente não registrado: {origin_id}\n")
+    def handle_disconnection(self, origin_id):
+        """Método para lidar com a desconexão de um cliente"""
+        if origin_id in self.clients:
+            self.update_status(f"Cliente {origin_id} desconectado.")
+            del self.clients[origin_id]  # Remove o cliente do dicionário
+            self.update_client_list()  # Atualiza a lista de clientes
 
-        elif msg_type == MSG_MSG:
-            if origin_id not in clients:
-                send_message(MSG_ERRO, 0, origin_id, addr, "Servidor", "ID de origem não registrado.\n")
-                return
-            print(f"Mensagem de {origin_id} para {dest_id}: {message}\n")
-            
-            # Envia a mensagem para o destinatário correto
-            if dest_id == 0:
-                # Envia para todos os clientes
-                for client_id, (client_addr, _) in clients.items():
-                    send_message(MSG_MSG, origin_id, client_id, client_addr, username, message)
-            elif dest_id in clients:
-                send_message(MSG_MSG, origin_id, dest_id, clients[dest_id][0], username, message)
-            else:
-                send_message(MSG_ERRO, 0, origin_id, addr, "Servidor", "ID de destino não encontrado.\n")
+    def handle_client_message(self, origin_id, dest_id, username, message):
+        """Método para lidar com mensagens enviadas pelos clientes"""
+        if origin_id not in self.clients:
+            return
 
+        # Se o destino for 0, envia a mensagem para todos os clientes (broadcast)
+        if dest_id == 0:
+            for client_id, (client_addr, _) in self.clients.items():
+                self.send_message(MSG_MSG, origin_id, 0, client_addr, username, message)
+        # Caso contrário, envia apenas para o cliente específico
+        elif dest_id in self.clients:
+            self.send_message(MSG_MSG, origin_id, dest_id, self.clients[dest_id][0], username, message)
         else:
-            print(f"Tipo de mensagem desconhecido: {msg_type}")
-            send_message(MSG_ERRO, 0, origin_id, addr, "Servidor", "Tipo de mensagem desconhecido.\n")
-    
-    except struct.error as e:
-        print(f"Erro ao desempacotar a mensagem: {e}\n")
-    except UnicodeDecodeError as e:
-        print(f"Erro de decodificação de texto: {e}\n")
-    finally: return 0
+            # Se o ID do destinatário não for encontrado, envia uma mensagem de erro
+            self.send_message(MSG_ERRO, 0, origin_id, self.clients[origin_id][0], "Servidor", "ID de destino não encontrado.")
 
-# Thread para receber e tratar mensagens
-def receive_messages():
-    while True:
-        data, addr = server_socket.recvfrom(1024)
-        handle_message(data, addr)
+    def receive_messages(self):
+        """Método que fica em loop para receber mensagens dos clientes"""
+        while True:
+            try:
+                data, addr = self.server_socket.recvfrom(1024)  # Recebe dados de clientes
+                self.handle_message(data, addr)  # Trata a mensagem recebida
+            except ConnectionResetError:
+                print("Conexão perdida com um cliente.")
 
-# Thread para enviar mensagens de status a cada minuto
-def send_server_status():
-    start_time = time.time()
-    while True:
-        time.sleep(60)
-        elapsed_time = time.time() - start_time
-        status_message = f"Servidor ativo há {elapsed_time:.0f} segundos. Clientes conectados: {len(clients)}.\n"
-        print(status_message)
+    def send_server_status(self):
+        """Método que envia o status do servidor periodicamente para os clientes"""
+        start_time = time.time()  # Marca o tempo inicial
+        while True:
+            time.sleep(60)  # Espera 60 segundos
+            elapsed_time = time.time() - start_time  # Calcula o tempo decorrido
+            status_message = f"Servidor ativo há {elapsed_time:.0f} segundos. Clientes conectados: {len(self.clients)}."
+            # Envia o status para todos os clientes conectados
+            for client_id, (client_addr, _) in self.clients.items():
+                self.send_message(MSG_MSG, 0, client_id, client_addr, "Servidor", status_message)
 
-        # Envia mensagem de status a todos os clientes
-        for client_id, (client_addr, _) in clients.items():
-            send_message(MSG_MSG, 0, client_id, client_addr, "Servidor", status_message)
+    def update_client_list(self):
+        """Método que atualiza a lista de clientes na interface gráfica"""
+        self.client_list.delete(0, END)
+        for client_id, (_, username) in self.clients.items():
+            self.client_list.insert(END, f"{client_id}: {username}")
 
-# Iniciar threads
-threading.Thread(target=receive_messages, daemon=True).start()
-threading.Thread(target=send_server_status, daemon=True).start()
+    def update_status(self, status):
+        """Método que atualiza o status do servidor no terminal (ou na interface)"""
+        print(status)  # Por enquanto, apenas imprime o status no terminal
 
-print(f"Servidor iniciado em {server_ip}:{server_port}.\n")
+    def shutdown_server(self):
+        """Método para desligar o servidor"""
 
-# Manter o servidor ativo
-try:
-    while True:
-        time.sleep(1)
-except KeyboardInterrupt:
-    print("Encerrando servidor.\n")
-    server_socket.close()
-    sys.exit(0)
+        # Envia mensagem de desconexão para todos os clientes
+        try:
+            shutdown_message = "Servidor desligado. Conexão encerrada."
+            for client_id, (client_addr, _) in self.clients.items():
+                self.send_message(MSG_MSG, 0, client_id, client_addr, "Servidor", shutdown_message)
+            if self.server_socket:
+                self.server_socket.close()  # Fecha o socket do servidor
+                self.window.quit()  # Fecha a interface gráfica
+        except Exception as e:
+            print(f"Erro ao enviar mensagem de desconexão!")
+
+if __name__ == "__main__":
+    server = ServerApp()  # Inicia o servidor

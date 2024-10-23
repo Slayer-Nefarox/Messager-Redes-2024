@@ -84,6 +84,11 @@ class ClientApp:
     def connect_to_server(self):
         """Método para conectar ao servidor"""
         try:
+
+            # Recria o socket se ele estiver fechado ou desconectado
+            if self.client_socket._closed:
+                self.client_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)  # Cria um novo socket
+
             # Obtém os dados da interface
             self.user_id = int(self.entry_id.get())
             self.username = self.entry_name.get().strip()
@@ -108,6 +113,11 @@ class ClientApp:
 
     def send_message(self, msg_type, dest_id=0, message=""):
         """Método para enviar mensagens ao servidor"""
+
+        if self.client_socket._closed: # Verifica se o socket está fechado
+            self.message_list.insert(END, "[ERRO] Não conectado ao servidor.")
+            return
+
         message_size = len(message)  # Calcula o tamanho da mensagem
         # Empacota a mensagem para enviar em formato binário
         packet = struct.pack("!IIII", msg_type, self.user_id, dest_id, message_size)
@@ -161,7 +171,10 @@ class ClientApp:
         """Método para encerrar a conexão com o servidor"""
         if self.connected:
             self.send_message(MSG_TCHAU)  # Envia a mensagem de desconexão
-            self.client_socket.close()  # Fecha o socket do cliente
+            try:
+                self.client_socket.close()  # Fecha o socket do cliente
+            except Exception as e:
+                self.message_list.insert(END, f"[ERRO] Falha ao fechar a conexão. Tente novamente!")
             self.connected = False  # Atualiza o status de conexão
             self.message_list.insert(END, "[INFO] Desconectado do servidor.")
             self.connect_button.config(state="normal")  # Habilita o botão de conectar
